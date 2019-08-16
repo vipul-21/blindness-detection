@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,7 +6,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import torchvision
 from torchvision import transforms
-import numpy as np
 import matplotlib.pyplot as plt
 from data_aug import *
 
@@ -16,14 +16,14 @@ class Net(nn.Module):
         self.conv1 = nn.Conv2d(3, 6, 5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16*5*5, 120)
+        self.fc1 = nn.Linear(16*61*61, 120)
         self.fc2 = nn.Linear(120, 84)
         self.fc3 = nn.Linear(84, 10)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16*5*5)
+        x = x.view(-1, 16*61*61)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
@@ -63,16 +63,22 @@ if __name__ == "__main__":
     # out = torchvision.utils.make_grid(inputs)
     # imshow(out)
 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print ("Using ", device)
+
     # Define net, loss function and learning algorithm
     net = Net()
+    net.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
     # Start training
-    for epoch in range(2):
+    epochs = 2
+    for epoch in range(epochs):
+        print("Epoch {}/{}".format(epoch, epochs))
         running_loss = 0.0
         for i, data in enumerate(dataset_loader, 0):
-            inputs, labels = data['image'], data['label']
+            inputs, labels = data['image'].to(device), data['label'].to(device)
             optimizer.zero_grad()
             outputs = net(inputs)
             loss = criterion(outputs, labels) 
@@ -81,7 +87,8 @@ if __name__ == "__main__":
 
             # print statistics
             running_loss += loss.item()
-            if i%2000 == 1999:
-                print('[%d, %5d] loss: %.3f' % (epoch+1, i+1, running_loss/2000)) 
+            n = 10
+            if i%n == n-1:
+                print('[%d, %5d] loss: %.3f' % (epoch+1, i+1, running_loss/n)) 
                 running_loss = 0.0
     print("Finished Training")
