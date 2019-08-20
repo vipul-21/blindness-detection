@@ -10,21 +10,28 @@ from config import *
 
 
 class BD_Dataset(Dataset):
-    def __init__(self, csv_file=TRAIN_CSV, data_dir=TRAIN_DIR, transform=None):
+    def __init__(self, csv_file=TRAIN_CSV, data_dir=TRAIN_DIR, transform=None, is_test=False):
         self.data_dir = data_dir
         self.transform = transform
-        self.class_labels = ["No DR", "Mild", "Moderate", "Severe", "Proliferative DR"]
-        self.data = pd.read_csv(TRAIN_CSV)
+        self.is_test = is_test
+        self.class_labels = ["No DR", "Mild",
+                             "Moderate", "Severe", "Proliferative DR"]
+        self.data = pd.read_csv(csv_file)
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        id, label = self.data.iloc[idx]
+        if not self.is_test:
+            id, label = self.data.iloc[idx]
+        else:
+            id,  = self.data.iloc[idx]
+            label = ""
+
         im = Image.open(os.path.join(self.data_dir, id + ".png"))
-        sample = {"image": im, "label": label}
+        sample = (im, label)
         if self.transform:
-            sample["image"] = self.transform(sample["image"])
+            sample = (self.transform(sample[0]), sample[1])
         return sample
 
 
@@ -43,7 +50,7 @@ class Rescale(object):
         new_h, new_w = self.output_size
         new_h, new_w = int(new_h), int(new_w)
         img = image.resize((new_w, new_h))
-        return {"image": img, "label": label}
+        return (img, label)
 
 
 class RandomCrop(object):
@@ -56,7 +63,7 @@ class RandomCrop(object):
             self.output_size = output_size
 
     def __call__(self, sample):
-        image, label = sample["image"], sample["label"]
+        image, label = sample
 
         h, w = image.size[:2]
         new_h, new_w = self.output_size
@@ -66,18 +73,18 @@ class RandomCrop(object):
 
         image = image.crop((left, top, left + new_w, top + new_h))
 
-        return {"image": image, "label": label}
+        return (image, label)
 
 
 class ToTensor(object):
     def __call__(self, sample):
-        image, label = sample["image"], sample["label"]
+        image, label = sample
 
         # swap color axis because
         # numpy image: H x W x C
         # torch image: C X H X W
         image = np.array(image).transpose((2, 0, 1))
-        return {"image": torch.from_numpy(image), "label": torch.tensor(label)}
+        return (torch.from_numpy(image), torch.tensor(label))
 
 
 if __name__ == "__main__":
@@ -99,4 +106,3 @@ if __name__ == "__main__":
         ax.imshow(sample["image"])
     plt.tight_layout()
     plt.show()
-

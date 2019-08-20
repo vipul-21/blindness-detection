@@ -27,3 +27,6 @@ else:
         os.mkdir(PREPROCESSED_TRAIN_DIR)
     if not os.path.isdir(PREPROCESSED_TEST_DIR):
         os.mkdir(PREPROCESSED_TEST_DIR)
+
+VALIDATION_FRACTION = 0.2
+PREPARE_SUBMIT = True 

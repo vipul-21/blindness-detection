@@ -1,3 +1,10 @@
 .venv/
+.idea/
 data/
 .ipynb_checkpoints/
+*.pt
+*.h5
+*.iml
+*.xml
+*.csv
+__pycache__/
