@@ -45,24 +45,26 @@ def imshow(inp, title=None):
         plt.title(title)
     plt.pause(0.001)  # pause a bit so that plots are updated
 
+
 def train(net, dataset_loader, optimizer, criterion, epochs):
     for epoch in range(epochs):
         print("Epoch {}/{}".format(epoch, epochs))
         running_loss = 0.0
         for i, data in enumerate(dataset_loader, 0):
-            inputs, labels = data['image'].to(device), data['label'].to(device)
+            inputs, labels = [x.to(device) for x in data]
             optimizer.zero_grad()
             outputs = net(inputs)
-            loss = criterion(outputs, labels) 
+            loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
- 
+
             # print statistics
             running_loss += loss.item()
             n = 10
-            if i%n == n-1:
-                print('[%d, %5d] loss: %.3f' % (epoch+1, i+1, running_loss/n)) 
+            if i % n == n-1:
+                print('[%d, %5d] loss: %.3f' % (epoch+1, i+1, running_loss/n))
                 running_loss = 0.0
+
 
 def validate(net, validation_loader):
     correct = 0.
@@ -71,7 +73,7 @@ def validate(net, validation_loader):
     true_labels = []
     with torch.no_grad():
         for data in validation_loader:
-            inputs, labels = data['image'].to(device), data['label'].to(device)
+            inputs, labels = [x.to(device) for x in data]
             outputs = net(inputs)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
@@ -82,11 +84,11 @@ def validate(net, validation_loader):
         print("Accuracy: ", 100*correct/total)
         print("Kappa: ", cohen_kappa_score(predictions, true_labels))
 
+
 if __name__ == "__main__":
     data_transform = transforms.Compose(
         [
-            transforms.Resize(512),
-            transforms.RandomResizedCrop(256),
+            CircleCrop((256, 256)),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
@@ -96,32 +98,35 @@ if __name__ == "__main__":
 
     train_size = int((1-VALIDATION_FRACTION)*len(dataset))
     validation_size = len(dataset) - train_size
-    train_dataset, validation_dataset = torch.utils.data.random_split(dataset, [train_size, validation_size])
+    train_dataset, validation_dataset = torch.utils.data.random_split(
+        dataset, [train_size, validation_size])
 
-    train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, num_workers=4)
-    validation_loader = DataLoader(validation_dataset, batch_size=4, shuffle=True, num_workers=4)
+    train_loader = DataLoader(
+        train_dataset, batch_size=4, shuffle=True, num_workers=4)
+    validation_loader = DataLoader(
+        validation_dataset, batch_size=4, shuffle=True, num_workers=4)
 
-    # # Visualize data
-    # plt.figure()
-    # batch = next(iter(dataset_loader))
-    # inputs, classes = batch["image"], batch["label"]
-    # out = torchvision.utils.make_grid(inputs)
-    # imshow(out)
+    # Visualize data
+    plt.figure()
+    batch = next(iter(train_loader))
+    inputs, classes = batch
+    out = torchvision.utils.make_grid(inputs)
+    imshow(out)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print ("Using ", device)
+    print("Using ", device)
 
     # Define net, loss function and learning algorithm
     net = Net()
     net.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-    epochs = 5 
+    epochs = 5
 
     print("Training({}):".format(train_size))
     train(net, train_loader, optimizer, criterion, epochs)
     torch.save(net, "basic_pytorch.pt")
-    
+
 if PREPARE_SUBMIT:
     print("Training on validation set as well({}):".format(validation_size))
     train(net, validation_loader, optimizer, criterion, epochs)

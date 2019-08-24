@@ -58,7 +58,7 @@ def train_model(model, dataloaders, dataset_sizes, criterion, optimizer, schedul
                 running_corrects += torch.sum(preds == labels.data)
             epoch_loss = running_loss/dataset_sizes[phase]
             epoch_acc = running_corrects.double()*100 / dataset_sizes[phase]
-            epoch_kappa_score = cohen_kappa_score(predictions_all, labels_all)
+            epoch_kappa_score = cohen_kappa_score(predictions_all, labels_all, weights="quadratic")
             print("{} Loss: {:.4f} Acc: {:.4f} Kappa: {:.4f}".format(
                 phase, epoch_loss, epoch_acc, epoch_kappa_score))
 
@@ -81,19 +81,23 @@ def train_model(model, dataloaders, dataset_sizes, criterion, optimizer, schedul
 
 
 if __name__ == "__main__":
-    train_transform = transforms.Compose([
-        transforms.RandomResizedCrop(224),
+    img_shape = (224, 224)
+    transform = transforms.Compose([
+        CircleCrop(img_shape),
+        # transforms.RandomResizedCrop(224),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
-    val_transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    ])
-    dataset = BD_Dataset()
+    # val_transform = transforms.Compose([
+    #     CircleCrop(img_shape),
+    #     # transforms.Resize(256),
+    #     # transforms.CenterCrop(224),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    # ])
+
+    dataset = BD_Dataset(transform=transform)
 
     # Make Train - Val Split
     train_size = int((1-VALIDATION_FRACTION)*len(dataset))
@@ -101,8 +105,8 @@ if __name__ == "__main__":
     dataset_sizes = {"train": train_size, "val": validation_size}
     train_dataset, validation_dataset = torch.utils.data.random_split(
         dataset, [train_size, validation_size])
-    train_dataset.transform = train_transform
-    validation_dataset.transform = val_transform
+    # train_dataset.transform = train_transform
+    # validation_dataset.transform = val_transform
 
     dataloaders = {
         "train": DataLoader(
@@ -111,7 +115,7 @@ if __name__ == "__main__":
             validation_dataset, batch_size=4, shuffle=True, num_workers=4)}
 
     # load pre trained model
-    model_ft = models.resnet101(pretrained=True)
+    model_ft = models.resnet18(pretrained=True)
     num_ftrs = model_ft.fc.in_features
     model_ft.fc = nn.Linear(num_ftrs, len(dataset.class_labels))
 
@@ -124,6 +128,6 @@ if __name__ == "__main__":
         optimizer_ft, step_size=7, gamma=0.1)
 
     model_ft = train_model(model_ft, dataloaders, dataset_sizes, criterion,
-                           optimizer_ft, exp_lr_scheduler, 100)
+                           optimizer_ft, exp_lr_scheduler, 10)
 
-    torch.save(model_ft, "finetuned_resnet101_100e.pt")
+    torch.save(model_ft, "temp_finetuned_resnet18_10e_preprocessed.pt")
