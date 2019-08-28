@@ -11,10 +11,11 @@ from config import *
 
 
 class BD_Dataset(Dataset):
-    def __init__(self, csv_file=TRAIN_CSV, data_dir=TRAIN_DIR, transform=None, is_test=False):
+    def __init__(self, csv_file=TRAIN_CSV, data_dir=TRAIN_DIR, transform=None, is_test=False, regression_data=False):
         self.data_dir = data_dir
         self.transform = transform
         self.is_test = is_test
+        self.regression_data = regression_data
         self.class_labels = ["No DR", "Mild",
                              "Moderate", "Severe", "Proliferative DR"]
         self.data = pd.read_csv(csv_file)
@@ -25,6 +26,8 @@ class BD_Dataset(Dataset):
     def __getitem__(self, idx):
         if not self.is_test:
             id, label = self.data.iloc[idx]
+            if self.regression_data:
+                label = torch.tensor(label)
         else:
             id,  = self.data.iloc[idx]
             label = ""
@@ -55,8 +58,8 @@ def crop_image_from_gray(img, tol=7):
 
 
 def load_ben_color(image, img_shape, sigmaX=10):
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    image = crop_image_from_gray(image)
+    # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # image = crop_image_from_gray(image)
     image = cv2.resize(image, img_shape)
     image = cv2.addWeighted(image, 4, cv2.GaussianBlur(
         image, (0, 0), sigmaX), -4, 128)
@@ -70,7 +73,7 @@ class CircleCrop(object):
         self.img_shape = img_shape
 
     def __call__(self, img):
-        img = cv2.cvtColor(np.array(img), cv2.COLOR_BGR2RGB)
+        img = np.asarray(img)  # cv2.cvtColor(np.array(img), cv2.COLOR_BGR2RGB)
         img = crop_image_from_gray(img)
         height, width, depth = img.shape
         largest_side = np.max((height, width))
