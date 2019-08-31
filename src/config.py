@@ -30,3 +30,13 @@ else:
 
 VALIDATION_FRACTION = 0.2
 PREPARE_SUBMIT = True 
+
+OLD_DATA_DIR = "/home/resl/Dev/Datasets/drd/"
+
+OLD_TRAIN_CSV = OLD_DATA_DIR + "train.csv"
+OLD_TEST_CSV = OLD_DATA_DIR + "test.csv"
+
+OLD_TRAIN_DIR = OLD_DATA_DIR + "train_images/"
+OLD_TEST_DIR = OLD_DATA_DIR + "test_images/"
+
+OLD_PREPROCESSED_DIR = OLD_DATA_DIR + "preprocessed/"

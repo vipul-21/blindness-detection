@@ -11,10 +11,12 @@ from config import *
 
 
 class BD_Dataset(Dataset):
-    def __init__(self, csv_file=TRAIN_CSV, data_dir=TRAIN_DIR, transform=None, is_test=False, regression_data=False):
+    def __init__(self, csv_file=TRAIN_CSV, data_dir=TRAIN_DIR, transform=None, is_test=False, regression_data=False, is_png=True, ret_id = False):
         self.data_dir = data_dir
         self.transform = transform
         self.is_test = is_test
+        self.is_png = is_png
+        self.ret_id = ret_id
         self.regression_data = regression_data
         self.class_labels = ["No DR", "Mild",
                              "Moderate", "Severe", "Proliferative DR"]
@@ -29,14 +31,21 @@ class BD_Dataset(Dataset):
             if self.regression_data:
                 label = torch.tensor(label)
         else:
-            id,  = self.data.iloc[idx]
+            id, _ = self.data.iloc[idx]
             label = ""
 
-        im = Image.open(os.path.join(self.data_dir, id + ".png"))
+        if self.is_png:
+            im = Image.open(os.path.join(self.data_dir, id + ".png"))
+        else:
+            im = Image.open(os.path.join(self.data_dir, id + ".jpeg"))
         sample = (im, label)
         if self.transform:
             sample = (self.transform(sample[0]), sample[1])
-        sample = (np.array(sample[0]), sample[1])
+        
+        if self.ret_id:
+            sample = (sample[0], id)
+        else:
+            sample = (np.array(sample[0]), sample[1])
         return sample
 
 
@@ -58,8 +67,6 @@ def crop_image_from_gray(img, tol=7):
 
 
 def load_ben_color(image, img_shape, sigmaX=10):
-    # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    # image = crop_image_from_gray(image)
     image = cv2.resize(image, img_shape)
     image = cv2.addWeighted(image, 4, cv2.GaussianBlur(
         image, (0, 0), sigmaX), -4, 128)

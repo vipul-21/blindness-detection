@@ -1,22 +1,29 @@
-from datetime import datetime
-import torch
-from sklearn.metrics import cohen_kappa_score
-import scipy as sp
 import numpy as np
-from functools import partial
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.utils.data import DataLoader, Subset
+import torchvision
+from torchvision import transforms, models
+import matplotlib.pyplot as plt
+from sklearn.metrics import cohen_kappa_score
+from efficientnet_pytorch import EfficientNet
+import time
+import copy
 
+from data_aug import *
+from config import *
+import utils
 
-def getDevice():
-    return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = utils.getDevice()
 
-
-def get_model_stamp():
-    return datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+accs = []
+kappas = []
+losses = []
 
 
 def get_actual_predictions(preds, coeff=[0.5, 1.5, 2.5, 3.5]):
-    device = getDevice()
     actual_preds = torch.zeros(preds.shape, device=device)
     for i, p in enumerate(preds):
         if p < coeff[0]:
@@ -33,58 +40,7 @@ def get_actual_predictions(preds, coeff=[0.5, 1.5, 2.5, 3.5]):
     return actual_preds
 
 
-class OptimizedRounder(object):
-    def __init__(self):
-        self.coef_ = 0
-
-    def _kappa_loss(self, coef, X, y):
-        X_p = np.copy(X)
-        for i, pred in enumerate(X_p):
-            if pred < coef[0]:
-                X_p[i] = 0
-            elif pred >= coef[0] and pred < coef[1]:
-                X_p[i] = 1
-            elif pred >= coef[1] and pred < coef[2]:
-                X_p[i] = 2
-            elif pred >= coef[2] and pred < coef[3]:
-                X_p[i] = 3
-            else:
-                X_p[i] = 4
-
-        ll = cohen_kappa_score(y, X_p, weights='quadratic')
-        return -ll
-
-    def fit(self, X, y):
-        loss_partial = partial(self._kappa_loss, X=X, y=y)
-        initial_coef = [0.5, 1.5, 2.5, 3.5]
-        self.coef_ = sp.optimize.minimize(
-            loss_partial, initial_coef, method='nelder-mead')
-
-    def predict(self, X, coef):
-        X_p = np.copy(X)
-        for i, pred in enumerate(X_p):
-            if pred < coef[0]:
-                X_p[i] = 0
-            elif pred >= coef[0] and pred < coef[1]:
-                X_p[i] = 1
-            elif pred >= coef[1] and pred < coef[2]:
-                X_p[i] = 2
-            elif pred >= coef[2] and pred < coef[3]:
-                X_p[i] = 3
-            else:
-                X_p[i] = 4
-        return X_p
-
-    def coefficients(self):
-        return self.coef_['x']
-
-
-import time
-import copy
-from sklearn.metrics import cohen_kappa_score
-
-def train_model(model, dataloaders, dataset_sizes, criterion, optimizer, scheduler, num_epochs=25, model_name = "temp.pt"):
-    device = getDevice()
+def train_model(model, dataloaders, dataset_sizes, criterion, optimizer, scheduler, num_epochs=25):
     since = time.time()
     best_model_wts = copy.deepcopy(model.state_dict())
     best_kappa_score = -float("inf")
@@ -139,32 +95,65 @@ def train_model(model, dataloaders, dataset_sizes, criterion, optimizer, schedul
             print("{} Loss: {:.4f} Acc: {:.4f} Kappa: {:.4f}".format(
                 phase, epoch_loss, epoch_acc, epoch_kappa_score))
 
+            losses.append(epoch_loss.item())
+            accs.append(epoch_acc.item())
+            kappas.append(epoch_kappa_score)
+
             if phase == "val" and epoch_kappa_score > best_kappa_score:
                 best_kappa_score = epoch_kappa_score
                 best_model_wts = copy.deepcopy(model.state_dict())
-                torch.save(model, model_name)
+                # torch.save(model_ft, "temp.pt")
+                torch.save(model, "finetuned_efficientNet_b2_30e_regression.pt")
         print()
 
     time_elapsed = time.time() - since
     print("Training copmlete in {:.0f}m{:.0f}s".format(
         time_elapsed//60, time_elapsed % 60))
-    print("Best val kappa score: {:4f}".format(best_kappa_score))
+    print("Best val Acc: {:4f}".format(best_acc))
 
     model.load_state_dict(best_model_wts)
     return model
 
 
 if __name__ == "__main__":
-    scores = [0.3, 1.67, 2.3, 0.6, 0.75, 2.45, 3.2, 3.3, 3.7, 8, 0.3, 1.67, 2.3, 0.6,
-              0.75, 2.45, 3.2, 3.3, 3.7, 8, 0.3, 1.67, 2.3, 0.6, 0.75, 2.45, 3.2, 3.3, 3.7, 8]
-    target = [0, 2, 2, 0, 1, 3, 2, 4, 4, 4, 0, 2, 2, 0,
-              1, 3, 2, 4, 4, 4, 0, 2, 2, 0, 1, 3, 2, 4, 4, 4]
-    optR = OptimizedRounder()
-    optR.fit(scores, target)
+    img_shape = (256, 256)
+    transform = transforms.Compose([
+        CircleCrop(img_shape),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ])
 
-    coeff = optR.coefficients()
-    print("Learned coeff: ", coeff)
+    dataset = BD_Dataset(transform=transform, regression_data=True)
+    # dataset = Subset(dataset, [i for i in range(200)])
 
-    preds = optR.predict(scores, coeff)
-    correct = sum(np.array(preds) == np.array(target))
-    print(correct, len(scores))
+    # Make Train - Val Split
+    train_size = int((1-VALIDATION_FRACTION)*len(dataset))
+    validation_size = len(dataset) - train_size
+    dataset_sizes = {"train": train_size, "val": validation_size}
+    train_dataset, validation_dataset = torch.utils.data.random_split(
+        dataset, [train_size, validation_size])
+    print(dataset_sizes)
+
+    dataloaders = {
+        "train": DataLoader(
+            train_dataset, batch_size=20, shuffle=True, num_workers=4),
+        "val": DataLoader(
+            validation_dataset, batch_size=20, shuffle=True, num_workers=4)}
+
+    # load pre trained model
+    model_ft = EfficientNet.from_pretrained("efficientnet-b2")
+    num_ftrs = model_ft._fc.in_features
+    model_ft._fc = nn.Linear(num_ftrs, 1)
+    model_ft = model_ft.to(device)
+
+    optimizer_ft = optim.Adam(model_ft.parameters(), lr=0.001, weight_decay=1e-5)
+    criterion = nn.MSELoss()
+    exp_lr_scheduler = optim.lr_scheduler.StepLR(
+        optimizer_ft, step_size=5, gamma=0.1)
+
+    model_ft = train_model(model_ft, dataloaders, dataset_sizes, criterion,
+                           optimizer_ft, exp_lr_scheduler, 30)
+
+    # torch.save(model_ft, "temp.pt")
+    torch.save(model_ft, "finetuned_efficientNet_b2_30e_regression.pt")

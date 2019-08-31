@@ -7,4 +7,5 @@ data/
 *.iml
 *.xml
 *.csv
+*.txt
 __pycache__/
