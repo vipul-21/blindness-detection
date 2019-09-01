@@ -8,6 +8,7 @@ TEST_CSV = DATA_DIR + "test.csv"
 TRAIN_DIR = DATA_DIR + "train_images/"
 TEST_DIR = DATA_DIR + "test_images/"
 
+PREPROCESSED_DIR = DATA_DIR + "preprocessed/"
 PREPROCESSED_TRAIN_DIR = DATA_DIR + "train_prep_images/"
 PREPROCESSED_TEST_DIR = DATA_DIR + "test_prep_images/"
 
